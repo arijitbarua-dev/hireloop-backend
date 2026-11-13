@@ -27,7 +27,7 @@ export async function connectToMongoDB() {
 const connectedClient = await connectToMongoDB();
 const database = connectedClient.db("HireLoop");
 const userCollection = database.collection("user");
-const jobs = database.collection("jobs");
+const jobsCollection = database.collection("jobs");
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
@@ -38,6 +38,26 @@ app.get('/users', async (req, res) => {
     const cursor = userCollection.find({});
     const result = await cursor.toArray();
     res.send(result);
+})
+
+
+// job api
+app.get('/jobs', async (req, res) => {
+    const cursor = jobsCollection.find({});
+    const result = await cursor.toArray();
+    res.send(result);
+})
+
+// get all jobs api
+app.get('/jobs', async (req, res) => {
+  try {
+    const cursor = jobs.find({}).sort({ postedAt: -1 });
+    const result = await cursor.toArray();
+    res.send(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to fetch jobs" });
+  }
 })
 
 // add job api
@@ -82,7 +102,7 @@ app.post("/jobs", async (req, res) => {
       postedAt: new Date(),
     };
 
-    const result = await jobs.insertOne(job);
+    const result = await jobsCollection.insertOne(job);
     res.status(201).send(result);
   } catch (err) {
     console.error(err);
