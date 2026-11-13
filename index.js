@@ -27,15 +27,67 @@ export async function connectToMongoDB() {
 const connectedClient = await connectToMongoDB();
 const database = connectedClient.db("HireLoop");
 const userCollection = database.collection("user");
+const jobs = database.collection("jobs");
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
 });
 
+// user api
 app.get('/users', async (req, res) => {
     const cursor = userCollection.find({});
     const result = await cursor.toArray();
     res.send(result);
+})
+
+// add job api
+app.post("/jobs", async (req, res) => {
+  try {
+    const body = req.body;
+
+    // basic validation
+    const requiredFields = [
+      "jobTitle",
+      "companyName",
+      "jobCategory",
+      "jobType",
+      "jobLocation",
+      "deadline",
+      "responsibilities",
+      "qualifications",
+    ];
+
+    for (const field of requiredFields) {
+      if (!body[field]) {
+        return res.status(400).send({ error: `Missing field: ${field}` });
+      }
+    }
+
+    // normalize types so MongoDB stores clean data
+    const job = {
+      jobTitle: String(body.jobTitle).trim(),
+      companyName: String(body.companyName).trim(),
+      jobCategory: body.jobCategory,
+      jobType: body.jobType,
+      remoteAllowed: Boolean(body.remoteAllowed),
+      jobLocation: String(body.jobLocation).trim(),
+      deadline: new Date(body.deadline),
+      minSalary: Number(body.minSalary) || 0,
+      maxSalary: Number(body.maxSalary) || 0,
+      frequency: body.frequency,
+      responsibilities: body.responsibilities,
+      qualifications: body.qualifications,
+      status: "Active",
+      applicants: 0,
+      postedAt: new Date(),
+    };
+
+    const result = await jobs.insertOne(job);
+    res.status(201).send(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to create job" });
+  }
 })
 
 app.listen(port, () => {
