@@ -1,6 +1,6 @@
 import express from 'express';
 import cors from 'cors';
-import { MongoClient } from 'mongodb';
+import { MongoClient, ObjectId } from 'mongodb';
 import 'dotenv/config';
 
 const app = express();
@@ -41,22 +41,15 @@ app.get('/users', async (req, res) => {
 })
 
 
-// job api
-app.get('/jobs', async (req, res) => {
-    const cursor = jobsCollection.find({});
-    const result = await cursor.toArray();
-    res.send(result);
-})
-
 // get all jobs api
 app.get('/jobs', async (req, res) => {
   try {
-    const cursor = jobs.find({}).sort({ postedAt: -1 });
+    const cursor = jobsCollection.find({}).sort({ postedAt: -1 });
     const result = await cursor.toArray();
     res.send(result);
   } catch (err) {
     console.error(err);
-    res.status(500).send({ error: "Failed to fetch jobs" });
+    res.status(500).send({ error: 'Failed to fetch jobs' });
   }
 })
 
@@ -107,6 +100,28 @@ app.post("/jobs", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send({ error: "Failed to create job" });
+  }
+})
+
+// delete job api
+app.delete("/jobs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid job id" });
+    }
+
+    const result = await jobsCollection.deleteOne({ _id: new ObjectId(id) });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).send({ error: "Job not found" });
+    }
+
+    res.send(result);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to delete job" });
   }
 })
 
