@@ -125,6 +125,75 @@ app.delete("/jobs/:id", async (req, res) => {
   }
 })
 
+// get single job by id
+app.get("/jobs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid job id" });
+    }
+
+    const job = await jobsCollection.findOne({
+      _id: new ObjectId(id),
+    });
+
+    if (!job) {
+      return res.status(404).send({ error: "Job not found" });
+    }
+
+    res.send(job);
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to fetch job" });
+  }
+});
+
+// update job api
+app.put("/jobs/:id", async (req, res) => {
+  try {
+    const { id } = req.params;
+    const body = req.body;
+
+    if (!ObjectId.isValid(id)) {
+      return res.status(400).send({ error: "Invalid job id" });
+    }
+
+    const updatedJob = {
+      jobTitle: String(body.jobTitle).trim(),
+      companyName: String(body.companyName).trim(),
+      jobCategory: body.jobCategory,
+      jobType: body.jobType,
+      remoteAllowed: Boolean(body.remoteAllowed),
+      jobLocation: String(body.jobLocation).trim(),
+      deadline: new Date(body.deadline),
+      minSalary: Number(body.minSalary) || 0,
+      maxSalary: Number(body.maxSalary) || 0,
+      frequency: body.frequency,
+      responsibilities: body.responsibilities,
+      qualifications: body.qualifications,
+    };
+
+    const result = await jobsCollection.updateOne(
+      { _id: new ObjectId(id) },
+      { $set: updatedJob }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.status(404).send({ error: "Job not found" });
+    }
+
+    res.send({
+      message: "Job updated successfully",
+      result,
+    });
+
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to update job" });
+  }
+}); 
+
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
 });
