@@ -35,9 +35,9 @@ app.get('/', (req, res) => {
 
 // user api
 app.get('/users', async (req, res) => {
-    const cursor = userCollection.find({});
-    const result = await cursor.toArray();
-    res.send(result);
+  const cursor = userCollection.find({});
+  const result = await cursor.toArray();
+  res.send(result);
 })
 
 
@@ -46,6 +46,27 @@ app.get('/jobs', async (req, res) => {
   try {
     const cursor = jobsCollection.find({}).sort({ postedAt: -1 });
     const result = await cursor.toArray();
+
+    const query = {};
+    if (req.query) {
+      if (req.query.jobType) {
+        query.jobType = req.query.jobType;
+      };
+      if (req.query.remoteAllowed) {
+        query.remoteAllowed = req.query.remoteAllowed === 'true';     
+      };
+      if (req.query.category){
+        query.category = req.query.category;
+      };
+      if (rew.query.search) {
+        query.$or = [
+          {title: {$regex: req.query.search, $option: 'i'}},
+          {jobLocation: {$regex: req.query.search, $option: 'i'}},
+          {responsibilities: {$regex: req.query.search, $option: 'i'}},
+          {qualifications: {$regex: req.query.search, $option: 'i'}},
+        ]
+      }
+    }
     res.send(result);
   } catch (err) {
     console.error(err);
@@ -192,7 +213,7 @@ app.put("/jobs/:id", async (req, res) => {
     console.error(err);
     res.status(500).send({ error: "Failed to update job" });
   }
-}); 
+});
 
 app.listen(port, () => {
   console.log(`Example app listening on port ${port}`);
