@@ -44,9 +44,6 @@ app.get('/users', async (req, res) => {
 // get all jobs api
 app.get('/jobs', async (req, res) => {
   try {
-    const cursor = jobsCollection.find({}).sort({ postedAt: -1 });
-    const result = await cursor.toArray();
-
     const query = {};
     if (req.query) {
       if (req.query.jobType) {
@@ -56,17 +53,27 @@ app.get('/jobs', async (req, res) => {
         query.remoteAllowed = req.query.remoteAllowed === 'true';     
       };
       if (req.query.category){
-        query.category = req.query.category;
+        query.jobCategory = req.query.category;
       };
-      if (rew.query.search) {
+      if (req.query.search) {
+        const search = String(req.query.search).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         query.$or = [
-          {title: {$regex: req.query.search, $option: 'i'}},
-          {jobLocation: {$regex: req.query.search, $option: 'i'}},
-          {responsibilities: {$regex: req.query.search, $option: 'i'}},
-          {qualifications: {$regex: req.query.search, $option: 'i'}},
+          {jobTitle: {$regex: search, $options: 'i'}},
+          {companyName: {$regex: search, $options: 'i'}},
+          {jobLocation: {$regex: search, $options: 'i'}},
+          {responsibilities: {$regex: search, $options: 'i'}},
+          {qualifications: {$regex: search, $options: 'i'}},
         ]
       }
     }
+
+    // sort: newest first by default, or oldest / highest salary
+    let sortSpec = { postedAt: -1 };
+    if (req.query.sort === 'oldest') sortSpec = { postedAt: 1 };
+    if (req.query.sort === 'salary') sortSpec = { maxSalary: -1 };
+
+    const cursor = jobsCollection.find(query).sort(sortSpec);
+    const result = await cursor.toArray();
     res.send(result);
   } catch (err) {
     console.error(err);
