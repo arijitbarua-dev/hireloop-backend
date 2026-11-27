@@ -28,6 +28,7 @@ const connectedClient = await connectToMongoDB();
 const database = connectedClient.db("HireLoop");
 const userCollection = database.collection("user");
 const jobsCollection = database.collection("jobs");
+const applicationsCollection = database.collection("applications");
 
 app.get('/', (req, res) => {
   res.send('Hello World!');
@@ -219,6 +220,91 @@ app.put("/jobs/:id", async (req, res) => {
   } catch (err) {
     console.error(err);
     res.status(500).send({ error: "Failed to update job" });
+  }
+});
+
+// check if user already applied for a job
+app.get("/applications/check", async (req, res) => {
+  try {
+    const { jobId, userId, userEmail } = req.query;
+    if (!jobId || (!userId && !userEmail)) {
+      return res.send({ applied: false });
+    }
+
+    const identityFilters = [];
+    if (userId) identityFilters.push({ userId: String(userId) });
+    if (userEmail) {
+      identityFilters.push({ userEmail: String(userEmail).trim().toLowerCase() });
+    }
+
+    const existing = await applicationsCollection.findOne({
+      jobId: String(jobId),
+      $or: identityFilters,
+    });
+
+    res.send({ applied: Boolean(existing) });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to check application" });
+  }
+});
+
+// apply for a job
+app.post("/applications", async (req, res) => {
+  try {
+    const { jobId, userId, userEmail, userName } = req.body;
+
+    if (!jobId || !ObjectId.isValid(String(jobId))) {
+      return res.status(400).send({ error: "Invalid job id" });
+    }
+
+    if (!userId && !userEmail) {
+      return res.status(401).send({ error: "User authentication is required" });
+    }
+
+    const job = await jobsCollection.findOne({ _id: new ObjectId(String(jobId)) });
+    if (!job) {
+      return res.status(404).send({ error: "Job not found" });
+    }
+
+    const normalizedEmail = userEmail ? String(userEmail).trim().toLowerCase() : null;
+    const normalizedUserId = userId ? String(userId) : null;
+
+    const identityFilters = [];
+    if (normalizedUserId) identityFilters.push({ userId: normalizedUserId });
+    if (normalizedEmail) identityFilters.push({ userEmail: normalizedEmail });
+
+    const existing = await applicationsCollection.findOne({
+      jobId: String(jobId),
+      $or: identityFilters,
+    });
+
+    if (existing) {
+      return res.status(409).send({ error: "You have already applied for this job" });
+    }
+
+    const application = {
+      jobId: String(jobId),
+      userId: normalizedUserId,
+      userEmail: normalizedEmail,
+      userName: userName ? String(userName).trim() : null,
+      status: "Pending",
+      appliedAt: new Date(),
+    };
+
+    const result = await applicationsCollection.insertOne(application);
+    await jobsCollection.updateOne(
+      { _id: new ObjectId(String(jobId)) },
+      { $inc: { applicants: 1 } }
+    );
+
+    res.status(201).send({
+      message: "Application submitted successfully",
+      applicationId: result.insertedId,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to submit application" });
   }
 });
 
