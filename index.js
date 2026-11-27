@@ -223,6 +223,116 @@ app.put("/jobs/:id", async (req, res) => {
   }
 });
 
+// get seeker applications, stats, and recent activities
+app.get("/applications/seeker", async (req, res) => {
+  try {
+    const { userId, userEmail } = req.query;
+
+    if (!userId && !userEmail) {
+      return res.status(400).send({ error: "userId or userEmail is required" });
+    }
+
+    const identityFilters = [];
+    if (userId) identityFilters.push({ userId: String(userId) });
+    if (userEmail) {
+      identityFilters.push({ userEmail: String(userEmail).trim().toLowerCase() });
+    }
+
+    const rawApps = await applicationsCollection
+      .find({ $or: identityFilters })
+      .sort({ appliedAt: -1 })
+      .toArray();
+
+    const jobObjectIds = rawApps
+      .map((app) => app.jobId)
+      .filter((id) => ObjectId.isValid(String(id)))
+      .map((id) => new ObjectId(String(id)));
+
+    const jobs = jobObjectIds.length
+      ? await jobsCollection.find({ _id: { $in: jobObjectIds } }).toArray()
+      : [];
+
+    const jobMap = new Map(jobs.map((j) => [String(j._id), j]));
+
+    const applications = rawApps.map((app) => {
+      const job = jobMap.get(String(app.jobId));
+      return {
+        _id: String(app._id),
+        jobId: String(app.jobId),
+        jobTitle: job?.jobTitle ?? "Unknown Position",
+        companyName: job?.companyName ?? "Unknown Company",
+        jobType: job?.jobType ?? "Full-time",
+        jobLocation: job?.jobLocation ?? "",
+        remoteAllowed: Boolean(job?.remoteAllowed),
+        jobCategory: job?.jobCategory ?? null,
+        status: app.status ?? "Applied",
+        appliedAt: app.appliedAt,
+        archived: Boolean(app.archived),
+      };
+    });
+
+    const totalApplied = applications.length;
+    const shortlisted = applications.filter(
+      (a) => a.status.toLowerCase() === "shortlisted"
+    ).length;
+    const interviews = applications.filter((a) =>
+      ["interview", "interviewing"].includes(a.status.toLowerCase())
+    ).length;
+    const offers = applications.filter((a) =>
+      ["offered", "offer"].includes(a.status.toLowerCase())
+    ).length;
+    const positiveOutcomes = shortlisted + interviews + offers;
+    const successRate =
+      totalApplied > 0 ? Math.round((positiveOutcomes / totalApplied) * 100) : 0;
+
+    // Build recent activities from applications + latest active jobs
+    const appActivities = applications.slice(0, 4).map((app) => ({
+      id: `app-${app._id}`,
+      type: "status",
+      role: app.jobTitle,
+      company: app.companyName,
+      statusText: app.status === "Pending" ? "Applied" : app.status,
+      timestamp: app.appliedAt,
+      jobId: app.jobId,
+    }));
+
+    const latestJobs = await jobsCollection
+      .find({ status: { $ne: "Expired" } })
+      .sort({ postedAt: -1 })
+      .limit(2)
+      .toArray();
+
+    const jobAlerts = latestJobs.map((job) => ({
+      id: `alert-${String(job._id)}`,
+      type: "alert",
+      role: job.jobTitle,
+      company: job.companyName,
+      timestamp: job.postedAt,
+      jobId: String(job._id),
+    }));
+
+    const activities = [...appActivities, ...jobAlerts].sort(
+      (a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+    );
+
+    res.send({
+      stats: {
+        savedJobs: 0,
+        totalApplied,
+        shortlisted,
+        interviews,
+        offers,
+        successRate,
+      },
+      applications,
+      activities,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to fetch seeker applications" });
+  }
+});
+
 // check if user already applied for a job
 app.get("/applications/check", async (req, res) => {
   try {
