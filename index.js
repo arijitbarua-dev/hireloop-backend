@@ -359,6 +359,47 @@ app.get("/applications/check", async (req, res) => {
   }
 });
 
+// free plan allows up to 3 applications per month
+const FREE_PLAN_MONTHLY_LIMIT = 3;
+
+// count a seeker's applications this month (free plan limit check)
+app.get("/applications/count", async (req, res) => {
+  try {
+    const { userId, userEmail } = req.query;
+
+    if (!userId && !userEmail) {
+      return res.status(400).send({ error: "userId or userEmail is required" });
+    }
+
+    const identityFilters = [];
+    if (userId) identityFilters.push({ userId: String(userId) });
+    if (userEmail) {
+      identityFilters.push({ userEmail: String(userEmail).trim().toLowerCase() });
+    }
+
+    // only applications from the current month count toward the limit
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+
+    const count = await applicationsCollection.countDocuments({
+      $or: identityFilters,
+      appliedAt: { $gte: startOfMonth },
+    });
+
+    const remaining = Math.max(0, FREE_PLAN_MONTHLY_LIMIT - count);
+
+    res.send({
+      count,
+      limit: FREE_PLAN_MONTHLY_LIMIT,
+      remaining,
+      limitReached: count >= FREE_PLAN_MONTHLY_LIMIT,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).send({ error: "Failed to count applications" });
+  }
+});
+
 // apply for a job
 app.post("/applications", async (req, res) => {
   try {
